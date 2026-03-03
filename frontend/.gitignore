@@ -1,0 +1,10 @@
+*
+!/.gitignore
+!/config.json
+!/package.json
+!/package-lock.json
+!/tsconfig.json
+!/webpack.config.mjs
+
+!/src
+!/src/**/*

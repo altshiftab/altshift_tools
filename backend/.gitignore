@@ -1,0 +1,8 @@
+*
+!/.dockerignore
+!/.gitignore
+!/Dockerfile
+!/go.mod
+!/go.sum
+!/service.go
+!/static_content_endpoints.go
