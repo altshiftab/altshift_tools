@@ -24,7 +24,8 @@ document.documentElement.classList.add(classToAdd);
 document.documentElement.classList.remove(classToRemove);
 
 setUpSpaRouting(
-    ["/"],
+    // "/" is only the root-path anchor the routing helper requires; the backend serves no document there.
+    ["/", "/str", "/fingerprint"],
     name => import(`./pages/${name}.ts`),
     renderableValue => {
         const mainElement = document.querySelector("main");

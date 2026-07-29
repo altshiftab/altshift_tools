@@ -14,8 +14,8 @@ async function hashHex(message: string, algorithm: AlgorithmIdentifier) {
     ).map((b) => b.toString(16).padStart(2, "0")).join('');
 }
 
-@customElement("root-content")
-export default class RootContent extends LitElement {
+@customElement("str-content")
+export default class StrContent extends LitElement {
     private _lastFunction = localStorage.getItem(lastFunctionIdentifier);
     private _focusAfterSelect: boolean = false;
 

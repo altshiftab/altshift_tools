@@ -6,14 +6,16 @@
     "build": "webpack --config webpack.config.mjs --stats-children"
   },
   "dependencies": {
-    "@altshiftab/styles": "^0.0.13",
-    "@altshiftab/web_components": "^0.0.70",
-    "lit": "^3.3.2"
+    "@altshiftab/styles": "^0.0.15",
+    "@altshiftab/web_components": "^0.0.74",
+    "@fingerprintjs/fingerprintjs": "^5.2.0",
+    "@thumbmarkjs/thumbmarkjs": "^1.10.1",
+    "lit": "^3.3.3"
   },
   "devDependencies": {
-    "@altshiftab/http_service_utils_js": "^0.0.8",
-    "@altshiftab/webpack_configuration": "^0.0.35",
-    "typescript": "^5.9.3",
-    "webpack-cli": "^6.0.1"
+    "@altshiftab/http_service_utils_js": "^0.0.12",
+    "@altshiftab/webpack_configuration": "^0.0.38",
+    "typescript": "^7.0.2",
+    "webpack-cli": "^7.2.2"
   }
 }
