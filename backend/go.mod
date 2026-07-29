@@ -1,4 +1,4 @@
-module github.com/altshiftab/altshift_tools_str_service
+module github.com/altshiftab/altshift_tools_service
 
 go 1.26
 

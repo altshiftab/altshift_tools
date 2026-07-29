@@ -26,19 +26,19 @@ all: update build
 
 backend-publish-build:
 	@echo "[backend] Building for publish..."
-	cd backend && podman build . --tag altshift-tools-str
+	cd backend && podman build . --tag altshift-tools
 
 backend-publish: build backend-publish-build
 	@echo "[backend] Publishing..."
-	podman tag altshift-tools-str europe-north2-docker.pkg.dev/altshift-main/images/altshift-tools-str:latest \
-		&& podman push europe-north2-docker.pkg.dev/altshift-main/images/altshift-tools-str:latest
+	podman tag altshift-tools europe-north2-docker.pkg.dev/altshift-main/images/altshift-tools:latest \
+		&& podman push europe-north2-docker.pkg.dev/altshift-main/images/altshift-tools:latest
 
 publish: backend-publish
 
 backend-deploy: backend-publish
 	@echo "[backend] Deploying to Cloud Run..."
-	gcloud run deploy altshift-tools-str \
-		--image=europe-north2-docker.pkg.dev/altshift-main/images/altshift-tools-str:latest \
+	gcloud run deploy altshift-tools \
+		--image=europe-north2-docker.pkg.dev/altshift-main/images/altshift-tools:latest \
 		--region=europe-north2 \
 		--project=altshift-main \
 		--platform=managed \

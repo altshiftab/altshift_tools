@@ -622,9 +622,9 @@ export default class FingerprintContent extends LitElement {
                 </tr>
             </table>
             <p>Loads recorded for this origin: ${result?.loads ?? "…"}</p>
-            <altshift-button type="button" @click=${this._reset}>Reset session history</altshift-button>
+            <altshift-button type="button" @click=${this._reset}>Reset</altshift-button>
 
-            <h2>Signals that changed within this session</h2>
+            <h2>Signals that changed</h2>
             <table>
                 <tr><th>Signal</th><th>Distinct values seen this session (exact)</th></tr>
                 ${result && result.changed.length === 0 ? html`
@@ -638,7 +638,7 @@ export default class FingerprintContent extends LitElement {
                 `)}
             </table>
 
-            <h2>Signals that are stable this session</h2>
+            <h2>Signals that are stable</h2>
             ${result ? html`
                 <p>${result.stable.length} of ${result.all.length} signals stable across ${result.loads} load(s)</p>
             ` : nothing}
@@ -656,7 +656,7 @@ export default class FingerprintContent extends LitElement {
             </details>
 
             <h2>Compare across sessions</h2>
-            <altshift-button type="button" @click=${this._copySnapshot}>Copy snapshot (this load)</altshift-button>
+            <altshift-button type="button" @click=${this._copySnapshot}>Copy</altshift-button>
             <textarea readonly placeholder="current snapshot appears here" .value=${result?.snapshot ?? ""}></textarea>
             <p>Paste a previous snapshot here:</p>
             <textarea class="snapshot-input" autocomplete="off" spellcheck="false" placeholder="paste a snapshot from another session"></textarea>

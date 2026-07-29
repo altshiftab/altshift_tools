@@ -1,5 +1,7 @@
 FROM golang:1.26-alpine AS builder
 
+ENV GOEXPERIMENT=jsonv2
+
 WORKDIR /usr/src/app
 COPY .. .
 RUN go mod download && go mod verify
