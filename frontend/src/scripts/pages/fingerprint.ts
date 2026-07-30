@@ -30,9 +30,13 @@ interface SurfaceResult {
 interface ProbeResult {
     fp: AggregateResult;
     tm: AggregateResult;
+    sdk: AggregateResult;
+    creep: AggregateResult;
     canvas: SurfaceResult;
     webgl: SurfaceResult;
     audio: SurfaceResult;
+    lies: string[];
+    trust: number;
     loads: number;
     changed: [string, string[]][];
     stable: [string, string][];
@@ -86,6 +90,8 @@ interface WebglResult {
     raw: string;
     vendor: string;
     renderer: string;
+    unmaskedVendor: string;
+    unmaskedRenderer: string;
 }
 
 function webglRaw(): WebglResult {
@@ -98,10 +104,21 @@ function webglRaw(): WebglResult {
         ?? canvasElement.getContext("experimental-webgl", {preserveDrawingBuffer: true})
     ) as WebGLRenderingContext | null;
     if (!gl)
-        return {raw: "no-webgl", vendor: "", renderer: ""};
+        return {raw: "no-webgl", vendor: "", renderer: "", unmaskedVendor: "", unmaskedRenderer: ""};
 
     const vendor = String(gl.getParameter(gl.VENDOR));
     const renderer = String(gl.getParameter(gl.RENDERER));
+
+    // The generic VENDOR/RENDERER above are masked ("Mozilla" / "Mozilla"); the real GPU is
+    // exposed via WEBGL_debug_renderer_info, which is exactly what the commercial SDKs read
+    // (and what privacy.resistFingerprinting blocks — null here is itself a signal).
+    let unmaskedVendor = "";
+    let unmaskedRenderer = "";
+    const debugRendererInfo = gl.getExtension("WEBGL_debug_renderer_info");
+    if (debugRendererInfo) {
+        unmaskedVendor = String(gl.getParameter(debugRendererInfo.UNMASKED_VENDOR_WEBGL));
+        unmaskedRenderer = String(gl.getParameter(debugRendererInfo.UNMASKED_RENDERER_WEBGL));
+    }
 
     const vertexShaderSource = "attribute vec2 p;varying vec2 v;void main(){v=p;gl_Position=vec4(p,0.,1.);}";
     const fragmentShaderSource = "precision mediump float;varying vec2 v;void main(){gl_FragColor=vec4(v*0.5+0.5,0.4,1.);}";
@@ -140,7 +157,7 @@ function webglRaw(): WebglResult {
 
     const extensions = (gl.getSupportedExtensions() ?? []).join(",");
 
-    return {raw: `${vendor}|${renderer}|${sampled}|${extensions}`, vendor, renderer};
+    return {raw: `${vendor}|${renderer}|${sampled}|${extensions}`, vendor, renderer, unmaskedVendor, unmaskedRenderer};
 }
 
 async function audioRaw(): Promise<string> {
@@ -180,6 +197,406 @@ async function audioRaw(): Promise<string> {
     }
 }
 
+// The probes below replicate the collection surface of the commercial anti-fraud /
+// bot-management SDKs seen in the wild (Akamai Bot Manager, DataDome, PerimeterX/HUMAN,
+// iovation, Forter, Kount). Those SDKs are proprietary and domain-licensed, so rather than
+// embedding them we reproduce the specific vectors they read that FingerprintJS / Thumbmark
+// do not surface on their own.
+
+async function uaClientHintsRaw(): Promise<string> {
+    const uaData = (navigator as Navigator & {
+        userAgentData?: {getHighEntropyValues(hints: string[]): Promise<Record<string, unknown>>};
+    }).userAgentData;
+    if (!uaData)
+        return "no-ua-ch";
+
+    try {
+        const highEntropy = await uaData.getHighEntropyValues([
+            "architecture", "bitness", "model", "platform", "platformVersion",
+            "uaFullVersion", "fullVersionList", "wow64",
+        ]);
+        return JSON.stringify(highEntropy);
+    } catch (error) {
+        return "err:" + errorMessage(error);
+    }
+}
+
+function speechVoicesRaw(): Promise<string> {
+    if (!("speechSynthesis" in window))
+        return Promise.resolve("no-speech-synthesis");
+
+    const synth = window.speechSynthesis;
+    const format = (): string | null => {
+        const voices = synth.getVoices();
+        if (voices.length === 0)
+            return null;
+        return voices.map(voice => `${voice.name}|${voice.lang}${voice.default ? "|d" : ""}`).join(",");
+    };
+
+    return new Promise(resolve => {
+        const immediate = format();
+        if (immediate !== null) {
+            resolve(immediate);
+            return;
+        }
+        synth.addEventListener("voiceschanged", () => {
+            const value = format();
+            if (value !== null)
+                resolve(value);
+        }, {once: true});
+        setTimeout(() => resolve(format() ?? "empty"), 1000);
+    });
+}
+
+async function webrtcRaw(): Promise<string> {
+    const PeerConnection = window.RTCPeerConnection
+        ?? (window as unknown as {webkitRTCPeerConnection?: typeof RTCPeerConnection}).webkitRTCPeerConnection;
+    if (!PeerConnection)
+        return "no-webrtc";
+
+    return new Promise(resolve => {
+        let connection: RTCPeerConnection;
+        try {
+            connection = new PeerConnection({iceServers: []});
+        } catch (error) {
+            resolve("err:" + errorMessage(error));
+            return;
+        }
+
+        const kinds = new Set<string>();
+        let settled = false;
+        const finish = () => {
+            if (settled)
+                return;
+            settled = true;
+            try {
+                connection.close();
+            } catch {
+            }
+            resolve(kinds.size ? [...kinds].sort().join(",") : "no-candidates");
+        };
+
+        connection.addEventListener("icecandidate", event => {
+            const candidate = event.candidate?.candidate;
+            if (!candidate) {
+                finish();
+                return;
+            }
+            // Record the candidate shape, not the address: a routable IPv4 vs an mDNS ".local"
+            // placeholder is the discriminating signal (Firefox obfuscates the host by default).
+            const type = / typ (\w+)/.exec(candidate)?.[1] ?? "?";
+            const address = candidate.split(" ")[4] ?? "";
+            const shape = /\.local$/.test(address)
+                ? "mdns"
+                : (/^\d+\.\d+\.\d+\.\d+$/.test(address) ? "ipv4" : "other");
+            kinds.add(`${type}:${shape}`);
+        });
+
+        try {
+            connection.createDataChannel("fp");
+            connection.createOffer()
+                .then(offer => connection.setLocalDescription(offer))
+                .catch(() => finish());
+        } catch (error) {
+            resolve("err:" + errorMessage(error));
+            return;
+        }
+
+        setTimeout(finish, 1500);
+    });
+}
+
+async function mediaDevicesRaw(): Promise<string> {
+    if (!navigator.mediaDevices?.enumerateDevices)
+        return "no-media-devices";
+    try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const counts: Record<string, number> = {};
+        for (const device of devices)
+            counts[device.kind] = (counts[device.kind] ?? 0) + 1;
+        return Object.keys(counts).sort().map(kind => `${kind}:${counts[kind]}`).join(",");
+    } catch (error) {
+        return "err:" + errorMessage(error);
+    }
+}
+
+async function permissionsRaw(): Promise<string> {
+    if (!navigator.permissions?.query)
+        return "no-permissions";
+
+    const names = [
+        "geolocation", "notifications", "camera", "microphone", "persistent-storage",
+        "push", "midi", "clipboard-read", "clipboard-write", "accelerometer", "gyroscope",
+    ];
+
+    const states: string[] = [];
+    for (const name of names) {
+        try {
+            const status = await navigator.permissions.query({name: name as PermissionName});
+            states.push(`${name}:${status.state}`);
+        } catch {
+            // A thrown query means the permission name is unsupported — itself a discriminator.
+            states.push(`${name}:unsupported`);
+        }
+    }
+    return states.join(",");
+}
+
+async function batteryRaw(): Promise<string> {
+    const getBattery = (navigator as Navigator & {
+        getBattery?: () => Promise<{level: number; charging: boolean}>;
+    }).getBattery;
+    if (!getBattery)
+        return "no-battery";
+    try {
+        const battery = await getBattery.call(navigator);
+        return `level=${battery.level} charging=${battery.charging}`;
+    } catch (error) {
+        return "err:" + errorMessage(error);
+    }
+}
+
+async function storageQuotaRaw(): Promise<string> {
+    if (!navigator.storage?.estimate)
+        return "no-storage-estimate";
+    try {
+        const estimate = await navigator.storage.estimate();
+        const quotaGiB = Math.round(((estimate.quota ?? 0) / (1024 ** 3)) * 10) / 10;
+        return `quotaGiB≈${quotaGiB}`;
+    } catch (error) {
+        return "err:" + errorMessage(error);
+    }
+}
+
+function networkInfoRaw(): string {
+    const connection = (navigator as Navigator & {
+        connection?: {effectiveType?: string; type?: string; saveData?: boolean};
+    }).connection;
+    if (!connection)
+        return "no-connection";
+    // downlink / rtt fluctuate every load, so only the stable descriptors feed the fingerprint.
+    return `effectiveType=${connection.effectiveType ?? "?"} type=${connection.type ?? "?"} saveData=${connection.saveData ?? false}`;
+}
+
+function localePreferencesRaw(): string {
+    const parts: string[] = [];
+    try {
+        const dateTime = Intl.DateTimeFormat().resolvedOptions() as Intl.ResolvedDateTimeFormatOptions & {hourCycle?: string};
+        parts.push(`locale=${dateTime.locale}`, `calendar=${dateTime.calendar}`, `numbering=${dateTime.numberingSystem}`, `hourCycle=${dateTime.hourCycle ?? "?"}`);
+    } catch {
+    }
+    try {
+        const locale = new Intl.Locale(navigator.language) as Intl.Locale & {
+            getWeekInfo?: () => {firstDay?: number};
+            weekInfo?: {firstDay?: number};
+        };
+        const weekInfo = locale.getWeekInfo?.() ?? locale.weekInfo;
+        if (weekInfo?.firstDay !== undefined)
+            parts.push(`firstDay=${weekInfo.firstDay}`);
+    } catch {
+    }
+    return parts.join(" ");
+}
+
+function screenGeometryRaw(): string {
+    const s = screen as Screen & {availLeft?: number; availTop?: number};
+    const orientation = s.orientation?.type ?? "?";
+    // outer-minus-inner exposes browser chrome (toolbar) height; avail* exposes the OS taskbar/dock.
+    const chromeHeight = Math.max(0, outerHeight - innerHeight);
+    const chromeWidth = Math.max(0, outerWidth - innerWidth);
+    return `orientation=${orientation} avail=${s.availWidth}x${s.availHeight} availOffset=${s.availLeft ?? 0},${s.availTop ?? 0} chrome=${chromeWidth}x${chromeHeight} depth=${s.colorDepth}/${s.pixelDepth}`;
+}
+
+function privacyFlagsRaw(): string {
+    const n = navigator as Navigator & {
+        globalPrivacyControl?: boolean;
+        oscpu?: string;
+        pdfViewerEnabled?: boolean;
+        webdriver?: boolean;
+    };
+    return [
+        `gpc=${n.globalPrivacyControl ?? "unset"}`,
+        `dnt=${n.doNotTrack ?? "unset"}`,
+        `cookies=${n.cookieEnabled}`,
+        `pdfViewer=${n.pdfViewerEnabled ?? "?"}`,
+        `oscpu=${n.oscpu ?? "?"}`,
+        `productSub=${n.productSub}`,
+        `webdriver=${n.webdriver ?? false}`,
+    ].join(" ");
+}
+
+// ---- CreepJS-style trust / lie detection ----
+// A scoped re-implementation of CreepJS's method (worker-vs-main mismatch, native-function
+// integrity, automation / consistency tells) rather than a vendored copy of the upstream
+// research app, per this repo's minimal-dependency convention.
+
+interface WorkerFingerprint {
+    userAgent: string;
+    hardwareConcurrency: number;
+    platform: string;
+    languages: string;
+    timezone: string;
+    canvas: string;
+}
+
+function workerFingerprintRaw(): Promise<WorkerFingerprint | string> {
+    if (!("Worker" in window))
+        return Promise.resolve("no-worker");
+
+    // Computed in a separate JS realm; spoofing extensions that only patch the main thread
+    // (and Firefox RFP) leave the worker's values inconsistent with the page's.
+    const workerSource = `
+        self.onmessage = async () => {
+            const n = self.navigator;
+            const result = {
+                userAgent: n.userAgent,
+                hardwareConcurrency: n.hardwareConcurrency,
+                platform: n.platform || "",
+                languages: (n.languages || []).join(","),
+                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
+                canvas: "unavailable",
+            };
+            try {
+                const canvas = new OffscreenCanvas(200, 40);
+                const context = canvas.getContext("2d");
+                context.textBaseline = "top";
+                context.font = "14px 'Arial'";
+                context.fillStyle = "#069";
+                context.fillText("worker \\u{1F512}", 2, 2);
+                const bytes = new Uint8Array(await (await canvas.convertToBlob()).arrayBuffer());
+                let hash = 0;
+                for (let i = 0; i < bytes.length; i++)
+                    hash = (hash * 31 + bytes[i]) >>> 0;
+                result.canvas = hash.toString(16);
+            } catch (error) {
+                result.canvas = "err";
+            }
+            self.postMessage(result);
+        };
+    `;
+
+    return new Promise(resolve => {
+        let worker: Worker;
+        let url: string;
+        try {
+            url = URL.createObjectURL(new Blob([workerSource], {type: "text/javascript"}));
+            worker = new Worker(url);
+        } catch (error) {
+            resolve("blocked:" + errorMessage(error));
+            return;
+        }
+
+        const cleanup = () => {
+            try {
+                worker.terminate();
+            } catch {
+            }
+            try {
+                URL.revokeObjectURL(url);
+            } catch {
+            }
+        };
+
+        worker.addEventListener("message", event => {
+            cleanup();
+            resolve(event.data as WorkerFingerprint);
+        });
+        worker.addEventListener("error", event => {
+            cleanup();
+            resolve("worker-error:" + (event.message || "unknown"));
+        });
+        worker.postMessage(null);
+        setTimeout(() => {
+            cleanup();
+            resolve("timeout");
+        }, 2000);
+    });
+}
+
+interface CreepResult {
+    lies: string[];
+    trust: number;
+    signals: SignalMap;
+}
+
+async function creepProbe(): Promise<CreepResult> {
+    const lies: string[] = [];
+    const signals: SignalMap = {};
+    const n = navigator as Navigator & {webdriver?: boolean};
+
+    signals["automation.webdriver"] = String(n.webdriver ?? false);
+    if (n.webdriver)
+        lies.push("navigator.webdriver=true");
+
+    const hasWindowChrome = "chrome" in window;
+    signals["automation.windowChrome"] = String(hasWindowChrome);
+    if (/ Chrome\//.test(n.userAgent) && !hasWindowChrome)
+        lies.push("UA claims Chrome but window.chrome is absent");
+
+    const platform = n.platform ?? "";
+    signals["consistency.platform"] = platform;
+    if (platform !== "" && /Windows/.test(n.userAgent) !== /Win/.test(platform))
+        lies.push(`UA/platform mismatch (platform=${platform})`);
+
+    try {
+        const permissionState = (await navigator.permissions.query({name: "notifications" as PermissionName})).state;
+        const apiState = typeof Notification !== "undefined" ? Notification.permission : "n/a";
+        signals["consistency.notifications"] = `perm=${permissionState} api=${apiState}`;
+        if (permissionState === "denied" && apiState === "default")
+            lies.push("notifications: Permissions=denied but Notification=default (headless tell)");
+    } catch {
+    }
+
+    const nativeChecks: [string, () => unknown][] = [
+        ["canvas.toDataURL", () => HTMLCanvasElement.prototype.toDataURL],
+        ["webgl.getParameter", () => WebGLRenderingContext.prototype.getParameter],
+        ["permissions.query", () => Permissions.prototype.query],
+    ];
+    const tampered: string[] = [];
+    for (const [name, getter] of nativeChecks) {
+        try {
+            const value = getter();
+            if (typeof value === "function" && !/\{\s*\[native code]\s*}/.test(Function.prototype.toString.call(value)))
+                tampered.push(name);
+        } catch {
+            tampered.push(`${name}:throws`);
+        }
+    }
+    signals["integrity.nativeFunctions"] = tampered.length ? `tampered:${tampered.join(",")}` : "all-native";
+    if (tampered.length)
+        lies.push(`non-native functions: ${tampered.join(",")}`);
+
+    const workerFingerprint = await workerFingerprintRaw();
+    if (typeof workerFingerprint === "string") {
+        signals["worker.status"] = workerFingerprint;
+    } else {
+        const mainTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        signals["worker.userAgent"] = workerFingerprint.userAgent === n.userAgent
+            ? "match"
+            : `MISMATCH (${token(workerFingerprint.userAgent)})`;
+        signals["worker.hardwareConcurrency"] = String(workerFingerprint.hardwareConcurrency) === String(n.hardwareConcurrency)
+            ? "match"
+            : `MISMATCH (${workerFingerprint.hardwareConcurrency} vs ${n.hardwareConcurrency})`;
+        signals["worker.timezone"] = workerFingerprint.timezone === mainTimezone
+            ? "match"
+            : `MISMATCH (${workerFingerprint.timezone} vs ${mainTimezone})`;
+        signals["worker.canvasHash"] = workerFingerprint.canvas;
+
+        if (workerFingerprint.userAgent && workerFingerprint.userAgent !== n.userAgent)
+            lies.push("worker userAgent ≠ main");
+        if (String(workerFingerprint.hardwareConcurrency) !== String(n.hardwareConcurrency))
+            lies.push("worker hardwareConcurrency ≠ main");
+        if (workerFingerprint.timezone && workerFingerprint.timezone !== mainTimezone)
+            lies.push("worker timezone ≠ main");
+    }
+
+    const trust = Math.max(0, 100 - lies.length * 20);
+    signals["trust.score"] = String(trust);
+    signals["trust.lies"] = lies.length ? lies.join(" | ") : "none";
+
+    return {lies, trust, signals};
+}
+
 function identity(webgl: WebglResult): SignalMap {
     const n = navigator;
     const s = screen;
@@ -194,6 +611,9 @@ function identity(webgl: WebglResult): SignalMap {
         deviceMemory: String((n as unknown as {deviceMemory?: number}).deviceMemory),
         maxTouchPoints: String(n.maxTouchPoints),
         webglVendorRenderer: webgl.vendor || webgl.renderer ? `${webgl.vendor} / ${webgl.renderer}` : "?",
+        webglUnmasked: webgl.unmaskedVendor || webgl.unmaskedRenderer
+            ? `${webgl.unmaskedVendor} / ${webgl.unmaskedRenderer}`
+            : "(masked/blocked)",
     };
 }
 
@@ -425,14 +845,58 @@ export default class FingerprintContent extends LitElement {
         for (const [key, value] of Object.entries(identity(webgl)))
             currentMap[`id.${key}`] = token(value);
 
+        const [uaClientHints, speechVoices, webrtc, mediaDevices, permissionStates, battery, storageQuota] =
+            await Promise.all([
+                uaClientHintsRaw(),
+                speechVoicesRaw(),
+                webrtcRaw(),
+                mediaDevicesRaw(),
+                permissionsRaw(),
+                batteryRaw(),
+                storageQuotaRaw(),
+            ]);
+        const creep = await creepProbe();
+
+        const sdkSignals: SignalMap = {
+            webglUnmasked: webgl.unmaskedVendor || webgl.unmaskedRenderer
+                ? `${webgl.unmaskedVendor} / ${webgl.unmaskedRenderer}`
+                : "(masked/blocked)",
+            uaClientHints: token(uaClientHints),
+            speechVoices: token(speechVoices),
+            webrtc,
+            mediaDevices,
+            permissions: token(permissionStates),
+            battery,
+            storageQuota,
+            network: networkInfoRaw(),
+            locale: localePreferencesRaw(),
+            screenGeometry: screenGeometryRaw(),
+            privacyFlags: privacyFlagsRaw(),
+            canvas: `#${canvasHash}`,
+            audio: `#${audioHash}`,
+        };
+        for (const [key, value] of Object.entries(sdkSignals))
+            currentMap[`sdk.${key}`] = value;
+        for (const [key, value] of Object.entries(creep.signals))
+            currentMap[`creep.${key}`] = value;
+
+        const canonical = (map: SignalMap): string =>
+            Object.keys(map).sort().map(key => `${key}=${map[key]}`).join("~");
+        const sdkId = cyrb53(canonical(sdkSignals));
+        const sdkSignalCount = String(Object.keys(sdkSignals).length);
+        const creepId = cyrb53(canonical(creep.signals));
+        const creepSignalCount = String(Object.keys(creep.signals).length);
+
         const history = loadHistory();
         history.loads++;
 
-        for (const aggregateKey of ["fp", "tm", "canvas", "webgl", "audio"])
+        for (const aggregateKey of ["fp", "tm", "sdk", "creep", "canvas", "webgl", "audio"])
             history.agg[aggregateKey] = history.agg[aggregateKey] ?? [];
 
         const fpDistinct = addDistinct(history.agg.fp, fpId);
         const tmDistinct = addDistinct(history.agg.tm, tmId);
+        const sdkDistinct = addDistinct(history.agg.sdk, sdkId);
+        const creepDistinct = addDistinct(history.agg.creep, creepId);
         const canvasDistinct = addDistinct(history.agg.canvas, canvasHash);
         const webglDistinct = addDistinct(history.agg.webgl, webglHash);
         const audioDistinct = addDistinct(history.agg.audio, audioHash);
@@ -461,9 +925,13 @@ export default class FingerprintContent extends LitElement {
         this._result = {
             fp: {id: fpId, signalCount: fpSignalCount, distinct: fpDistinct},
             tm: {id: tmId, signalCount: tmSignalCount, distinct: tmDistinct},
+            sdk: {id: sdkId, signalCount: sdkSignalCount, distinct: sdkDistinct},
+            creep: {id: creepId, signalCount: creepSignalCount, distinct: creepDistinct},
             canvas: {hash: canvasHash, distinct: canvasDistinct},
             webgl: {hash: webglHash, distinct: webglDistinct},
             audio: {hash: audioHash, distinct: audioDistinct},
+            lies: creep.lies,
+            trust: creep.trust,
             loads: history.loads,
             changed,
             stable,
@@ -585,7 +1053,7 @@ export default class FingerprintContent extends LitElement {
 
             <h2>Aggregated fingerprint value</h2>
             <table>
-                <tr><th>Library</th><th>Fingerprint (this load)</th><th>Signals</th><th>Distinct seen this origin</th></tr>
+                <tr><th>Source</th><th>Fingerprint (this load)</th><th>Signals</th><th>Distinct seen this origin</th></tr>
                 <tr>
                     <td>FingerprintJS</td>
                     <td class="hash">${result?.fp.id ?? "…"}</td>
@@ -598,9 +1066,34 @@ export default class FingerprintContent extends LitElement {
                     <td>${result?.tm.signalCount ?? "…"}</td>
                     <td>${result ? distinctTag(result.tm.distinct) : "…"}</td>
                 </tr>
+                <tr>
+                    <td>Anti-fraud surface (hand-rolled)</td>
+                    <td class="hash">${result?.sdk.id ?? "…"}</td>
+                    <td>${result?.sdk.signalCount ?? "…"}</td>
+                    <td>${result ? distinctTag(result.sdk.distinct) : "…"}</td>
+                </tr>
+                <tr>
+                    <td>CreepJS-style</td>
+                    <td class="hash">${result?.creep.id ?? "…"}</td>
+                    <td>${result?.creep.signalCount ?? "…"}</td>
+                    <td>${result ? distinctTag(result.creep.distinct) : "…"}</td>
+                </tr>
             </table>
             ${this._renderContributingParameters("FingerprintJS", "fp.")}
             ${this._renderContributingParameters("Thumbmark", "tm.")}
+            ${this._renderContributingParameters("Anti-fraud surface", "sdk.")}
+            ${this._renderContributingParameters("CreepJS-style", "creep.")}
+
+            <h2>Bot / lie detection (CreepJS-style)</h2>
+            <table>
+                <tr><th>Trust score</th><td>${result ? `${result.trust} / 100` : "…"}</td></tr>
+                <tr>
+                    <th>Lies${result ? ` (${result.lies.length})` : ""}</th>
+                    <td class=${result && result.lies.length ? "changed" : "stable"}>
+                        ${result ? (result.lies.length ? result.lies.join("; ") : "none detected") : "…"}
+                    </td>
+                </tr>
+            </table>
 
             <h2>Per-surface hashes</h2>
             <table>
