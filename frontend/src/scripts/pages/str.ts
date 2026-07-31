@@ -4,6 +4,12 @@ import {classMap} from "lit/directives/class-map.js";
 
 const lastFunctionIdentifier = 'last_function';
 
+function decodeBase64Url(input: string): string {
+    const base64 = input.replaceAll("-", "+").replaceAll("_", "/");
+    const binary = atob(base64.padEnd(base64.length + (4 - base64.length % 4) % 4, "="));
+    return new TextDecoder().decode(Uint8Array.from(binary, character => character.charCodeAt(0)));
+}
+
 async function hashHex(message: string, algorithm: AlgorithmIdentifier) {
     return Array.from(
         new Uint8Array(
@@ -166,6 +172,21 @@ export default class StrContent extends LitElement {
                     this._outputValue = "";
                 }
                 return;
+            case "decode-jwt": {
+                try {
+                    const [encodedHeader, encodedPayload] = functionInput.trim().split(".");
+                    if (!encodedHeader || !encodedPayload)
+                        throw new Error("Missing JWT part.");
+
+                    const header = JSON.parse(decodeBase64Url(encodedHeader));
+                    const claims = JSON.parse(decodeBase64Url(encodedPayload));
+                    this._outputValue = `Header:\n${JSON.stringify(header, null, 4)}\n\nClaims:\n${JSON.stringify(claims, null, 4)}`;
+                } catch {
+                    this._inputError = true;
+                    this._outputValue = "";
+                }
+                return;
+            }
             case "length":
                 this._outputValue = functionInput.length.toString();
                 return;
@@ -212,6 +233,9 @@ export default class StrContent extends LitElement {
                         <option value="json-escape">Escape JSON</option>
                         <option value="lines-to-json-array">Make an array from lines</option>
                         <option value="json-array-to-lines">Make lines from an array</option>
+                    </optgroup>
+                    <optgroup label="JWT">
+                        <option value="decode-jwt">Decode JWT</option>
                     </optgroup>
                     <optgroup label="Other">
                         <option value="length">Length</option>
