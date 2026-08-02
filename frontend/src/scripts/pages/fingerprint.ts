@@ -7,6 +7,37 @@ import {getFingerprint, getFingerprintData} from "@thumbmarkjs/thumbmarkjs";
 import "@altshiftab/web_components/button";
 
 const historyStorageKey = "fp-full-history";
+const consentStorageKey = "fp-consent";
+
+type ConsentState = "pending" | "granted" | "declined";
+
+// The site enforces `require-trusted-types-for 'script'`. The bundled fingerprinting libraries
+// assign plain strings to Trusted Types sinks — FingerprintJS sets innerHTML, and the
+// CreepJS-style probe constructs a Worker from a blob: URL — which the enforced CSP blocks
+// unless a "default" policy handles those assignments. Install a pass-through default policy;
+// it is scoped to this page (the only route that imports this module), so the rest of the site
+// keeps full Trusted Types enforcement. The CSP allow-lists the "default" policy name for this.
+(() => {
+    const trustedTypes = (window as unknown as {
+        trustedTypes?: {
+            createPolicy(name: string, rules: {
+                createHTML: (input: string) => string;
+                createScript: (input: string) => string;
+                createScriptURL: (input: string) => string;
+            }): unknown;
+        };
+    }).trustedTypes;
+
+    try {
+        trustedTypes?.createPolicy("default", {
+            createHTML: input => input,
+            createScript: input => input,
+            createScriptURL: input => input,
+        });
+    } catch {
+        // No Trusted Types support, or a "default" policy already exists — nothing to do.
+    }
+})();
 
 type SignalMap = Record<string, string>;
 
@@ -684,6 +715,21 @@ function saveHistory(history: ProbeHistory): void {
     }
 }
 
+function readStoredConsent(): string | null {
+    try {
+        return localStorage.getItem(consentStorageKey);
+    } catch {
+        return null;
+    }
+}
+
+function storeConsent(): void {
+    try {
+        localStorage.setItem(consentStorageKey, "granted");
+    } catch {
+    }
+}
+
 function addDistinct(values: string[], value: string): number {
     if (value != null && !values.includes(value))
         values.push(value);
@@ -700,10 +746,19 @@ export default class FingerprintContent extends LitElement {
     private _result: ProbeResult | null = null;
 
     @state()
+    private _consent: ConsentState = readStoredConsent() === "granted" ? "granted" : "pending";
+
+    @state()
     private _diff: DiffResult | null = null;
 
     @query(".snapshot-input")
     private _snapshotInputTextarea!: HTMLTextAreaElement;
+
+    @query(".consent-dialog")
+    private _consentDialog!: HTMLDialogElement;
+
+    @query(".remember-input")
+    private _rememberInput!: HTMLInputElement;
 
     private _currentMap: SignalMap = {};
 
@@ -784,13 +839,113 @@ export default class FingerprintContent extends LitElement {
             }
 
         }
+
+        dialog.consent-dialog {
+            max-width: 34rem;
+            width: calc(100% - 2rem);
+            background-color: var(--main-color);
+            color: var(--text-color);
+            border: var(--border-width) solid var(--border-color);
+            padding: 1.25rem 1.5rem;
+        }
+
+        dialog.consent-dialog::backdrop {
+            background-color: rgba(0, 0, 0, 0.55);
+        }
+
+        dialog.consent-dialog h2 {
+            margin: 0 0 0.75rem;
+        }
+
+        dialog.consent-dialog p {
+            margin: 0 0 0.75rem;
+            line-height: 1.5;
+        }
+
+        dialog.consent-dialog ul {
+            margin: 0 0 0.75rem;
+            padding-left: 1.25rem;
+            line-height: 1.5;
+        }
+
+        dialog.consent-dialog code {
+            font-family: monospace;
+        }
+
+        .consent-remember {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin: 0.5rem 0 1.25rem;
+            cursor: pointer;
+        }
+
+        .consent-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            justify-content: flex-end;
+        }
+
+        .consent-actions altshift-button {
+            width: fit-content;
+        }
+
+        .loads-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+        }
+
+        .loads-row p {
+            margin: 0;
+        }
     `;
 
     firstUpdated() {
+        if (this._consent === "granted")
+            this._runProbe();
+    }
+
+    updated() {
+        const dialog = this._consentDialog;
+        if (!dialog)
+            return;
+        if (this._consent === "pending") {
+            if (!dialog.open)
+                dialog.showModal();
+        } else if (dialog.open) {
+            dialog.close();
+        }
+    }
+
+    private _runProbe(): void {
         this._probe().catch((error: unknown) => {
             throw new Error(`The fingerprint probe failed: ${errorMessage(error)}`);
         });
     }
+
+    private _approve = () => {
+        if (this._rememberInput?.checked)
+            storeConsent();
+        this._consent = "granted";
+        this._runProbe();
+    };
+
+    private _decline = () => {
+        // Declining reads nothing and writes nothing to the device.
+        this._consent = "declined";
+    };
+
+    private _reconsider = () => {
+        this._consent = "pending";
+    };
+
+    private _onConsentCancel = () => {
+        // Escape / programmatic cancel counts as declining: nothing runs, nothing is stored.
+        this._consent = "declined";
+    };
 
     private async _probe(): Promise<void> {
         const currentMap: SignalMap = {};
@@ -942,6 +1097,7 @@ export default class FingerprintContent extends LitElement {
 
     private _reset = () => {
         localStorage.removeItem(historyStorageKey);
+        localStorage.removeItem(consentStorageKey);
         location.reload();
     };
 
@@ -1045,7 +1201,64 @@ export default class FingerprintContent extends LitElement {
         }
     }
 
+    private _renderConsentDialog() {
+        return html`
+            <dialog class="consent-dialog" @cancel=${this._onConsentCancel}>
+                <h2>Before this page reads your device</h2>
+                <p>
+                    This tool demonstrates browser fingerprinting. If you approve, it will actively
+                    read identifying signals from this device, for example:
+                </p>
+                <ul>
+                    <li>Canvas, WebGL (including the unmasked GPU) and AudioContext rendering</li>
+                    <li>WebRTC candidates, media devices and installed speech voices</li>
+                    <li>User-Agent client hints, screen geometry, locale, permissions, battery and storage estimates</li>
+                    <li>The FingerprintJS and Thumbmark libraries (open source, run locally in your browser)</li>
+                </ul>
+                <p>
+                    Everything stays in your browser — <strong>nothing is sent to any server</strong>. A
+                    history is kept locally (in <code>localStorage</code>) so the tool can show whether your
+                    fingerprint stays stable across loads; “Reset” erases it.
+                </p>
+                <label class="consent-remember">
+                    <input type="checkbox" class="remember-input" />
+                    Remember my approval on this device
+                </label>
+                <div class="consent-actions">
+                    <altshift-button type="button" @click=${this._decline}>Decline</altshift-button>
+                    <altshift-button type="button" @click=${this._approve}>Approve &amp; run</altshift-button>
+                </div>
+            </dialog>
+        `;
+    }
+
+    private _renderPending() {
+        return html`
+            <h1>Aggregated fingerprint probe</h1>
+            <p>This page reads your device fingerprint. Review the notice and choose whether to continue.</p>
+        `;
+    }
+
+    private _renderDeclined() {
+        return html`
+            <h1>Aggregated fingerprint probe</h1>
+            <p>Fingerprinting declined — nothing was read from or stored on your device.</p>
+            <altshift-button type="button" @click=${this._reconsider}>Run the fingerprint probe</altshift-button>
+        `;
+    }
+
     render() {
+        return html`
+            ${this._renderConsentDialog()}
+            ${this._consent === "granted"
+                ? this._renderResults()
+                : this._consent === "declined"
+                    ? this._renderDeclined()
+                    : this._renderPending()}
+        `;
+    }
+
+    private _renderResults() {
         const result = this._result;
 
         return html`
@@ -1079,6 +1292,10 @@ export default class FingerprintContent extends LitElement {
                     <td>${result ? distinctTag(result.creep.distinct) : "…"}</td>
                 </tr>
             </table>
+            <div class="loads-row">
+                <p>Loads recorded for this origin: ${result?.loads ?? "…"}</p>
+                <altshift-button type="button" @click=${this._reset}>Reset</altshift-button>
+            </div>
             ${this._renderContributingParameters("FingerprintJS", "fp.")}
             ${this._renderContributingParameters("Thumbmark", "tm.")}
             ${this._renderContributingParameters("Anti-fraud surface", "sdk.")}
@@ -1114,8 +1331,6 @@ export default class FingerprintContent extends LitElement {
                     <td>${result ? distinctTag(result.audio.distinct) : "…"}</td>
                 </tr>
             </table>
-            <p>Loads recorded for this origin: ${result?.loads ?? "…"}</p>
-            <altshift-button type="button" @click=${this._reset}>Reset</altshift-button>
 
             <h2>Signals that changed</h2>
             <table>

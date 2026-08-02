@@ -8,6 +8,12 @@ import (
 
 	motmedelEnv "github.com/Motmedel/utils_go/pkg/env"
 	motmedelErrors "github.com/Motmedel/utils_go/pkg/errors"
+	"github.com/Motmedel/utils_go/pkg/errors/types/empty_error"
+	"github.com/Motmedel/utils_go/pkg/errors/types/nil_error"
+	motmedelMux "github.com/Motmedel/utils_go/pkg/http/mux"
+	contentSecurityPolicyParsing "github.com/Motmedel/utils_go/pkg/http/parsing/headers/content_security_policy"
+	contentSecurityPolicy "github.com/Motmedel/utils_go/pkg/http/types/content_security_policy"
+	contentSecurityPolicyUtils "github.com/Motmedel/utils_go/pkg/http/utils/content_security_policy"
 	gcpUtilsHttp "github.com/altshiftab/gcp_utils/pkg/http"
 	"github.com/altshiftab/gcp_utils/pkg/http/types/service"
 	"github.com/altshiftab/gcp_utils/pkg/http/types/service/service_config"
@@ -18,9 +24,16 @@ import (
 // policy and webpack's chunk loader registers a "webpack" one. Both must be allow-listed by
 // the require-trusted-types-for CSP, otherwise createPolicy is rejected and the page fails to
 // load. These names match the hard-coded defaults in @altshiftab/webpack_configuration and Lit.
+//
+// The /fingerprint page additionally installs a pass-through "default" policy so the bundled
+// fingerprinting libraries — which assign to Trusted Types sinks with plain strings
+// (FingerprintJS sets innerHTML; the CreepJS-style probe constructs a Worker) — can run under
+// the enforced CSP. Only that module installs the policy, so the other routes keep full
+// Trusted Types enforcement even though the name is allow-listed globally.
 const (
 	litHtmlTrustedTypesPolicy = "lit-html"
 	webpackTrustedTypesPolicy = "webpack"
+	defaultTrustedTypesPolicy = "default"
 )
 
 var spaRoutes = []string{"/str", "/fingerprint", "/privacy-policy"}
@@ -51,12 +64,22 @@ func main() {
 		logger.FatalWithExitingMessage("Nil mux.", nil)
 	}
 
-	if err := gcpUtilsHttp.PatchTrustedTypes(mux, litHtmlTrustedTypesPolicy, webpackTrustedTypesPolicy); err != nil {
+	if err := patchFingerprintContentSecurityPolicy(mux); err != nil {
+		logger.FatalWithExitingMessage(
+			"An error occurred when patching the fingerprint content security policy.",
+			motmedelErrors.New(fmt.Errorf("patch fingerprint content security policy: %w", err), mux),
+		)
+	}
+
+	if err := gcpUtilsHttp.PatchTrustedTypes(
+		mux,
+		litHtmlTrustedTypesPolicy, webpackTrustedTypesPolicy, defaultTrustedTypesPolicy,
+	); err != nil {
 		logger.FatalWithExitingMessage(
 			"An error occurred when patching trusted types.",
 			motmedelErrors.NewWithTrace(
 				fmt.Errorf("patch trusted types: %w", err),
-				mux, litHtmlTrustedTypesPolicy, webpackTrustedTypesPolicy,
+				mux, litHtmlTrustedTypesPolicy, webpackTrustedTypesPolicy, defaultTrustedTypesPolicy,
 			),
 		)
 	}
@@ -106,4 +129,47 @@ func main() {
 			motmedelErrors.NewWithTrace(fmt.Errorf("http server listen and serve: %w", err), httpServer),
 		)
 	}
+}
+
+// patchFingerprintContentSecurityPolicy adds "self" and "blob:" to the shared document CSP's
+// worker-src: the /fingerprint tool's CreepJS-style probe runs a Worker from a blob: URL, which
+// "default-src 'self'" would otherwise reject.
+//
+// Trusted Types stays enforced; see the PatchTrustedTypes call, which additionally allow-lists
+// the "default" policy the fingerprint page installs.
+func patchFingerprintContentSecurityPolicy(mux *motmedelMux.Mux) error {
+	if mux == nil {
+		return motmedelErrors.NewWithTrace(nil_error.New("mux"))
+	}
+
+	defaultDocumentHeaders := mux.DefaultDocumentHeaders
+	if defaultDocumentHeaders == nil {
+		return motmedelErrors.NewWithTrace(nil_error.New("default document headers"))
+	}
+
+	contentSecurityPolicyString := defaultDocumentHeaders[gcpUtilsHttp.ContentSecurityPolicyHeader]
+	if contentSecurityPolicyString == "" {
+		return motmedelErrors.NewWithTrace(empty_error.New("content security policy"))
+	}
+
+	csp, err := contentSecurityPolicyParsing.Parse([]byte(contentSecurityPolicyString))
+	if err != nil {
+		return motmedelErrors.New(
+			fmt.Errorf("parse content security policy: %w", err),
+			contentSecurityPolicyString,
+		)
+	}
+	if csp == nil {
+		return motmedelErrors.NewWithTrace(nil_error.New("content security policy"))
+	}
+
+	contentSecurityPolicyUtils.PatchCspSourceDirective[contentSecurityPolicy.WorkerSrcDirective](
+		csp,
+		&contentSecurityPolicy.KeywordSource{Keyword: "self"},
+		&contentSecurityPolicy.SchemeSource{Scheme: "blob"},
+	)
+
+	defaultDocumentHeaders[gcpUtilsHttp.ContentSecurityPolicyHeader] = csp.String()
+
+	return nil
 }
