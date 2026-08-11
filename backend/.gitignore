@@ -5,4 +5,5 @@
 !/go.mod
 !/go.sum
 !/service.go
+!/service_test.go
 !/static_content_endpoints.go

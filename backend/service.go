@@ -11,7 +11,6 @@ import (
 	"github.com/Motmedel/utils_go/pkg/errors/types/empty_error"
 	"github.com/Motmedel/utils_go/pkg/errors/types/nil_error"
 	motmedelMux "github.com/Motmedel/utils_go/pkg/http/mux"
-	contentSecurityPolicyParsing "github.com/Motmedel/utils_go/pkg/http/parsing/headers/content_security_policy"
 	contentSecurityPolicy "github.com/Motmedel/utils_go/pkg/http/types/content_security_policy"
 	contentSecurityPolicyUtils "github.com/Motmedel/utils_go/pkg/http/utils/content_security_policy"
 	gcpUtilsHttp "github.com/altshiftab/gcp_utils/pkg/http"
@@ -152,7 +151,7 @@ func patchFingerprintContentSecurityPolicy(mux *motmedelMux.Mux) error {
 		return motmedelErrors.NewWithTrace(empty_error.New("content security policy"))
 	}
 
-	csp, err := contentSecurityPolicyParsing.Parse([]byte(contentSecurityPolicyString))
+	csp, err := contentSecurityPolicy.Parse([]byte(contentSecurityPolicyString))
 	if err != nil {
 		return motmedelErrors.New(
 			fmt.Errorf("parse content security policy: %w", err),

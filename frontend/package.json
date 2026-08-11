@@ -14,7 +14,7 @@
   },
   "devDependencies": {
     "@altshiftab/http_service_utils_js": "^0.0.12",
-    "@altshiftab/webpack_configuration": "^0.0.38",
+    "@altshiftab/webpack_configuration": "^0.0.40",
     "typescript": "^7.0.2",
     "webpack-cli": "^7.2.2"
   }
