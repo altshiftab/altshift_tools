@@ -3,7 +3,7 @@ module github.com/altshiftab/altshift_tools_service
 go 1.26
 
 require (
-	github.com/Motmedel/utils_go v1.7.0
+	github.com/Motmedel/utils_go v1.10.0
 	github.com/altshiftab/gcp_utils v1.1.1
 )
 

@@ -1,14 +1,21 @@
 .DEFAULT_GOAL := all
 
-.PHONY: all update frontend-update backend-update build frontend-build backend-build publish backend-publish backend-publish-build backend-deploy
+.PHONY: all update frontend-update backend-update build frontend-check frontend-build backend-build publish backend-publish backend-publish-build backend-deploy
+
+# The pseudo-version corresponds to the typescript/v7.0.2 release tag (2bd066d87f5b).
+TSGO := github.com/microsoft/typescript-go/cmd/tsgo@v0.0.0-20260708042240-2bd066d87f5b
 
 backend-build:
 	@echo "[backend] Building..."
-	cd backend && go generate && GOOS=linux go build -a -ldflags="-s -w -buildid=" -installsuffix cgo -o ../service
+	cd backend && GOEXPERIMENT=jsonv2 go generate && GOOS=linux GOEXPERIMENT=jsonv2 go build -a -ldflags="-s -w -buildid=" -installsuffix cgo -o ../service
 
-frontend-build:
+frontend-check:
+	@echo "[frontend] Type checking..."
+	cd frontend && go run $(TSGO) --noEmit -p tsconfig.json
+
+frontend-build: frontend-check
 	@echo "[frontend] Building..."
-	cd frontend && npm run build
+	cd frontend && GOEXPERIMENT=jsonv2 go run github.com/altshiftab/web_build/cmd/web_build@v0.0.4 -splitting
 
 build: frontend-build backend-build
 

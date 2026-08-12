@@ -2,20 +2,12 @@
   "name": "altshift_tools",
   "type": "module",
   "version": "0.5",
-  "scripts": {
-    "build": "webpack --config webpack.config.mjs --stats-children"
-  },
   "dependencies": {
+    "@altshiftab/http_service_utils_js": "^0.0.12",
     "@altshiftab/styles": "^0.0.15",
     "@altshiftab/web_components": "^0.0.82",
     "@fingerprintjs/fingerprintjs": "^5.2.0",
     "@thumbmarkjs/thumbmarkjs": "^1.10.1",
     "lit": "^3.3.3"
-  },
-  "devDependencies": {
-    "@altshiftab/http_service_utils_js": "^0.0.12",
-    "@altshiftab/webpack_configuration": "^0.0.40",
-    "typescript": "^7.0.2",
-    "webpack-cli": "^7.2.2"
   }
 }
