@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	motmedelMux "github.com/Motmedel/utils_go/pkg/http/mux"
-	gcpUtilsHttp "github.com/altshiftab/gcp_utils/pkg/http"
 )
 
 func makeMux(defaultDocumentHeaders map[string]string) *motmedelMux.Mux {
@@ -41,7 +40,7 @@ func TestPatchFingerprintContentSecurityPolicy(t *testing.T) {
 		{
 			name: "worker-src is patched",
 			mux: makeMux(map[string]string{
-				gcpUtilsHttp.ContentSecurityPolicyHeader: "default-src 'self'",
+				contentSecurityPolicyHeaderName: "default-src 'self'",
 			}),
 			expectedFragments: []string{"worker-src", "'self'", "blob:"},
 		},
@@ -62,7 +61,7 @@ func TestPatchFingerprintContentSecurityPolicy(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			patched := testCase.mux.DefaultDocumentHeaders[gcpUtilsHttp.ContentSecurityPolicyHeader]
+			patched := testCase.mux.DefaultDocumentHeaders[contentSecurityPolicyHeaderName]
 			for _, fragment := range testCase.expectedFragments {
 				if !strings.Contains(patched, fragment) {
 					t.Errorf("patched content security policy %q does not contain %q", patched, fragment)
