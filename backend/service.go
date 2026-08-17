@@ -5,19 +5,19 @@ import (
 	"log/slog"
 	"net/http"
 
-	motmedelEnv "github.com/Motmedel/utils_go/pkg/env"
-	motmedelErrors "github.com/Motmedel/utils_go/pkg/errors"
-	"github.com/Motmedel/utils_go/pkg/errors/types/empty_error"
-	"github.com/Motmedel/utils_go/pkg/errors/types/nil_error"
-	motmedelMux "github.com/Motmedel/utils_go/pkg/http/mux"
-	endpointPkg "github.com/Motmedel/utils_go/pkg/http/mux/types/endpoint"
-	motmedelService "github.com/Motmedel/utils_go/pkg/http/service"
-	"github.com/Motmedel/utils_go/pkg/http/service/service_config"
-	motmedelHttpTypes "github.com/Motmedel/utils_go/pkg/http/types"
-	contentSecurityPolicy "github.com/Motmedel/utils_go/pkg/http/types/content_security_policy"
-	contentSecurityPolicyUtils "github.com/Motmedel/utils_go/pkg/http/utils/content_security_policy"
-	motmedelHttpLogger "github.com/Motmedel/utils_go/pkg/log/http_logger"
-	"github.com/Motmedel/utils_go/pkg/log/http_logger/http_logger_config"
+	altshiftEnv "github.com/altshiftab/utils_go/pkg/env"
+	altshiftErrors "github.com/altshiftab/utils_go/pkg/errors"
+	"github.com/altshiftab/utils_go/pkg/errors/types/empty_error"
+	"github.com/altshiftab/utils_go/pkg/errors/types/nil_error"
+	altshiftMux "github.com/altshiftab/utils_go/pkg/http/mux"
+	endpointPkg "github.com/altshiftab/utils_go/pkg/http/mux/types/endpoint"
+	altshiftService "github.com/altshiftab/utils_go/pkg/http/service"
+	"github.com/altshiftab/utils_go/pkg/http/service/service_config"
+	altshiftHttpTypes "github.com/altshiftab/utils_go/pkg/http/types"
+	contentSecurityPolicy "github.com/altshiftab/utils_go/pkg/http/types/content_security_policy"
+	contentSecurityPolicyUtils "github.com/altshiftab/utils_go/pkg/http/utils/content_security_policy"
+	altshiftHttpLogger "github.com/altshiftab/utils_go/pkg/log/http_logger"
+	"github.com/altshiftab/utils_go/pkg/log/http_logger/http_logger_config"
 )
 
 const contentSecurityPolicyHeaderName = "Content-Security-Policy"
@@ -60,31 +60,37 @@ func toolEndpoints(endpoints []*endpointPkg.Endpoint) ([]*endpointPkg.Endpoint, 
 	}
 
 	if indexEndpoint == nil {
-		return nil, motmedelErrors.NewWithTrace(nil_error.NewWithInstance("endpoint", "index"))
+		return nil, altshiftErrors.NewWithTrace(nil_error.NewWithInstance("endpoint", "index"))
 	}
 
 	return append(toolEndpoints, endpointPkg.Duplicate(indexEndpoint, spaRoutes...)...), nil
 }
 
 func main() {
-	logger := motmedelHttpLogger.New(http_logger_config.WithGcp(true))
+	logger := altshiftHttpLogger.New(http_logger_config.WithGcp(true))
 	slog.SetDefault(logger.Logger)
 
-	domain := motmedelEnv.GetEnvWithDefault("DOMAIN", "localhost")
-	port := motmedelEnv.GetEnvWithDefault("PORT", "8080")
+	domain := altshiftEnv.GetEnvWithDefault("DOMAIN", "localhost")
+	port := altshiftEnv.GetEnvWithDefault("PORT", "8080")
 
 	endpoints, err := toolEndpoints(staticContentEndpoints)
 	if err != nil {
 		logger.FatalWithExitingMessage(
 			"An error occurred when making the tool endpoints.",
-			motmedelErrors.New(fmt.Errorf("tool endpoints: %w", err)),
+			altshiftErrors.New(fmt.Errorf("tool endpoints: %w", err)),
 		)
 	}
 
-	httpService, err := motmedelService.New(
+	httpService, err := altshiftService.New(
 		service_config.WithHost(domain),
 		service_config.WithAddress(fmt.Sprintf(":%s", port)),
 		service_config.WithProfile(service_config.ProfilePublicWeb),
+		// The frontend is built with code splitting, so a document names its chunks in an import map
+		// and vouches for them there rather than on a script element. Safari 26 loses what the map
+		// carries and blocks every chunk an entry imports, leaving the page blank; reporting a
+		// violation says as much without taking the page down with it. Enforcement can come back
+		// once Safari 26 is out of the traffic.
+		service_config.WithIntegrityPolicyEnforced(false),
 		// The endpoints are given before the service is made, the sitemap being made of what it is
 		// given: it lists the tool routes, and no root that is not served.
 		service_config.WithEndpoints(endpoints...),
@@ -95,13 +101,13 @@ func main() {
 		// The languages a vulnerability is preferably reported in; the rest of what the security.txt
 		// says, and which of its forms is served, follows from the domain.
 		service_config.WithSecurityTxtContent(
-			&motmedelHttpTypes.SecurityTxt{PreferredLanguages: []string{"sv", "en"}},
+			&altshiftHttpTypes.SecurityTxt{PreferredLanguages: []string{"sv", "en"}},
 		),
 	)
 	if err != nil {
 		logger.FatalWithExitingMessage(
 			"An error occurred when creating the http service.",
-			motmedelErrors.New(fmt.Errorf("service new: %w", err), domain, port),
+			altshiftErrors.New(fmt.Errorf("service new: %w", err), domain, port),
 		)
 	}
 	if httpService == nil {
@@ -112,7 +118,7 @@ func main() {
 	if err := patchFingerprintContentSecurityPolicy(httpService.Mux); err != nil {
 		logger.FatalWithExitingMessage(
 			"An error occurred when patching the fingerprint content security policy.",
-			motmedelErrors.New(fmt.Errorf("patch fingerprint content security policy: %w", err)),
+			altshiftErrors.New(fmt.Errorf("patch fingerprint content security policy: %w", err)),
 		)
 	}
 
@@ -122,7 +128,7 @@ func main() {
 	if err := httpService.Serve(); err != nil {
 		logger.FatalWithExitingMessage(
 			"An error occurred when serving.",
-			motmedelErrors.New(fmt.Errorf("service serve: %w", err)),
+			altshiftErrors.New(fmt.Errorf("service serve: %w", err)),
 		)
 	}
 }
@@ -133,30 +139,30 @@ func main() {
 //
 // Trusted Types stays enforced; see the trusted types the service is made with, which additionally
 // allow the "default" policy the fingerprint page installs.
-func patchFingerprintContentSecurityPolicy(mux *motmedelMux.Mux) error {
+func patchFingerprintContentSecurityPolicy(mux *altshiftMux.Mux) error {
 	if mux == nil {
-		return motmedelErrors.NewWithTrace(nil_error.New("mux"))
+		return altshiftErrors.NewWithTrace(nil_error.New("mux"))
 	}
 
 	defaultDocumentHeaders := mux.DefaultDocumentHeaders
 	if defaultDocumentHeaders == nil {
-		return motmedelErrors.NewWithTrace(nil_error.New("default document headers"))
+		return altshiftErrors.NewWithTrace(nil_error.New("default document headers"))
 	}
 
 	contentSecurityPolicyString := defaultDocumentHeaders[contentSecurityPolicyHeaderName]
 	if contentSecurityPolicyString == "" {
-		return motmedelErrors.NewWithTrace(empty_error.New("content security policy"))
+		return altshiftErrors.NewWithTrace(empty_error.New("content security policy"))
 	}
 
 	csp, err := contentSecurityPolicy.Parse([]byte(contentSecurityPolicyString))
 	if err != nil {
-		return motmedelErrors.New(
+		return altshiftErrors.New(
 			fmt.Errorf("parse content security policy: %w", err),
 			contentSecurityPolicyString,
 		)
 	}
 	if csp == nil {
-		return motmedelErrors.NewWithTrace(nil_error.New("content security policy"))
+		return altshiftErrors.NewWithTrace(nil_error.New("content security policy"))
 	}
 
 	contentSecurityPolicyUtils.PatchCspSourceDirective[contentSecurityPolicy.WorkerSrcDirective](

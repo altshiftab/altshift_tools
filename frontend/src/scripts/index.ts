@@ -1,4 +1,5 @@
-import {addErrorEventListeners, setUpSpaRouting} from "@altshiftab/http_service_utils_js";
+import {addErrorEventListeners} from "@altshiftab/utils/browser/error_reporting";
+import {setUpSpaRouting} from "@altshiftab/utils/browser/routing";
 import {html, render} from "lit";
 
 import "@altshiftab/styles/common_web.css";

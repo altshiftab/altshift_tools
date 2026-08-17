@@ -4,11 +4,11 @@ import (
 	"strings"
 	"testing"
 
-	motmedelMux "github.com/Motmedel/utils_go/pkg/http/mux"
+	altshiftMux "github.com/altshiftab/utils_go/pkg/http/mux"
 )
 
-func makeMux(defaultDocumentHeaders map[string]string) *motmedelMux.Mux {
-	var mux motmedelMux.Mux
+func makeMux(defaultDocumentHeaders map[string]string) *altshiftMux.Mux {
+	var mux altshiftMux.Mux
 	mux.DefaultDocumentHeaders = defaultDocumentHeaders
 	return &mux
 }
@@ -18,7 +18,7 @@ func TestPatchFingerprintContentSecurityPolicy(t *testing.T) {
 
 	testCases := []struct {
 		name              string
-		mux               *motmedelMux.Mux
+		mux               *altshiftMux.Mux
 		expectedError     bool
 		expectedFragments []string
 	}{
@@ -29,7 +29,7 @@ func TestPatchFingerprintContentSecurityPolicy(t *testing.T) {
 		},
 		{
 			name:          "nil default document headers",
-			mux:           &motmedelMux.Mux{},
+			mux:           &altshiftMux.Mux{},
 			expectedError: true,
 		},
 		{
