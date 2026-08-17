@@ -2,8 +2,6 @@
 
 .PHONY: all update frontend-update backend-update build frontend-check frontend-build backend-build publish backend-publish backend-publish-build backend-deploy
 
-# The pseudo-version corresponds to the typescript/v7.0.2 release tag (2bd066d87f5b).
-TSGO := github.com/microsoft/typescript-go/cmd/tsgo@v0.0.0-20260708042240-2bd066d87f5b
 
 backend-build:
 	@echo "[backend] Building..."
@@ -11,11 +9,11 @@ backend-build:
 
 frontend-check:
 	@echo "[frontend] Type checking..."
-	cd frontend && go run $(TSGO) --noEmit -p tsconfig.json
+	cd frontend && go tool tsgo --noEmit -p tsconfig.json
 
 frontend-build: frontend-check
 	@echo "[frontend] Building..."
-	cd frontend && GOEXPERIMENT=jsonv2 go run github.com/altshiftab/web_build/cmd/web_build@v0.0.4 -splitting
+	cd frontend && GOEXPERIMENT=jsonv2 go tool web_build -splitting
 
 build: frontend-build backend-build
 

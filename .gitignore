@@ -3,5 +3,9 @@
 !/config.json
 !/Makefile
 
+# Tool dependencies for the build, so that generating needs no network.
+!/go.mod
+!/go.sum
+
 !/backend
 !/frontend
