@@ -5,7 +5,7 @@
   "dependencies": {
     "@altshiftab/styles": "^0.0.16",
     "@altshiftab/utils": "^0.0.9",
-    "@altshiftab/web_components": "^0.0.84",
+    "@altshiftab/web_components": "^0.0.86",
     "@fingerprintjs/fingerprintjs": "^5.2.0",
     "@thumbmarkjs/thumbmarkjs": "^1.10.1",
     "lit": "^3.3.3"
