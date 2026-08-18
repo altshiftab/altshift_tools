@@ -1,0 +1,37 @@
+body > header {
+    /* The narrow layout carries the toggler as the one entry of the header's menu instead, so as
+       not to spend a row of its own on it. */
+    > .theme-toggler-container {
+        @media screen and (max-width: 1280px) {
+            display: none;
+        }
+    }
+
+    /* The header slots the same children into the nav bar and into the menu, so this one is left
+       to the menu; the wide layout keeps the toggler under the header. */
+    > altshift-header > .theme-toggler-box {
+        display: none;
+
+        @media screen and (max-width: 1280px) {
+            --altshift-theme-toggler-icon-size: 1.5rem;
+            --altshift-theme-toggler-padding: 0 2rem;
+
+            display: flex;
+            box-sizing: border-box;
+            border: var(--altshift-border-width) solid var(--altshift-border-color);
+            background-color: var(--altshift-main-color);
+
+            &::part(box-container) {
+                display: flex;
+                background-color: var(--altshift-main-color);
+            }
+
+            /* The row is as tall as the rows of the www menu, so that the two menus match, and the
+               mark takes the whole of it, so that pressing anywhere in the row toggles. */
+            > theme-toggler {
+                flex: 1 0 auto;
+                height: 5.5rem;
+            }
+        }
+    }
+}

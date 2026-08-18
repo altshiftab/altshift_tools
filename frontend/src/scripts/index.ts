@@ -9,6 +9,8 @@ import "@altshiftab/web_components/footer";
 import "@altshiftab/web_components/box";
 import {applyTheme} from "@altshiftab/web_components/theme_toggler"
 
+import "../styles/index.css";
+
 addErrorEventListeners();
 
 applyTheme();
