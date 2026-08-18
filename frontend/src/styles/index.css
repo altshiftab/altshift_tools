@@ -1,8 +1,11 @@
 body > header {
     /* The narrow layout carries the toggler as the one entry of the header's menu instead, so as
-       not to spend a row of its own on it. */
-    > .theme-toggler-container {
-        @media screen and (max-width: 1280px) {
+       not to spend a row of its own on it. The room that row made between the bar and the content
+       stays, though, or the content would start hard against the bar. */
+    @media screen and (max-width: 1280px) {
+        padding-bottom: 3rem;
+
+        > .theme-toggler-container {
             display: none;
         }
     }
@@ -13,8 +16,11 @@ body > header {
         display: none;
 
         @media screen and (max-width: 1280px) {
+            /* The row is sized by the mark and the padding around it. It is the menu's only entry,
+               so there are no rows of type for it to be held level with, and a taller row would
+               only be empty. */
             --altshift-theme-toggler-icon-size: 1.5rem;
-            --altshift-theme-toggler-padding: 0 2rem;
+            --altshift-theme-toggler-padding: 1rem 2rem;
 
             display: flex;
             box-sizing: border-box;
@@ -26,11 +32,9 @@ body > header {
                 background-color: var(--altshift-main-color);
             }
 
-            /* The row is as tall as the rows of the www menu, so that the two menus match, and the
-               mark takes the whole of it, so that pressing anywhere in the row toggles. */
+            /* The mark takes the whole row, so that pressing anywhere in it toggles. */
             > theme-toggler {
                 flex: 1 0 auto;
-                height: 5.5rem;
             }
         }
     }
