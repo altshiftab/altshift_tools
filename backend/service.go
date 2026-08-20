@@ -70,6 +70,11 @@ func main() {
 	slog.SetDefault(logger.Logger)
 
 	domain := altshiftEnv.GetEnvWithDefault("DOMAIN", "localhost")
+	// Firebase Hosting rewrites Host to the run.app address it dialled, so the
+	// host below is one this service does not answer for and every request is
+	// refused with 421. The load balancer passes Host through, so behind that
+	// this stays off.
+	trustForwardedHost := altshiftEnv.GetEnvWithDefault("TRUST_FORWARDED_HOST", "") == "true"
 	port := altshiftEnv.GetEnvWithDefault("PORT", "8080")
 
 	endpoints, err := toolEndpoints(staticContentEndpoints)
@@ -82,6 +87,7 @@ func main() {
 
 	httpService, err := altshiftService.New(
 		service_config.WithHost(domain),
+		service_config.WithTrustForwardedHost(trustForwardedHost),
 		service_config.WithAddress(fmt.Sprintf(":%s", port)),
 		service_config.WithProfile(service_config.ProfilePublicWeb),
 		// The frontend is built with code splitting, so a document names its chunks in an import map
