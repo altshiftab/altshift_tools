@@ -1,6 +1,5 @@
 FROM golang:1.27-alpine AS builder
 
-ENV GOEXPERIMENT=jsonv2
 
 WORKDIR /usr/src/app
 COPY .. .

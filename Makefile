@@ -5,7 +5,7 @@
 
 backend-build:
 	@echo "[backend] Building..."
-	cd backend && GOEXPERIMENT=jsonv2 go generate && GOOS=linux GOEXPERIMENT=jsonv2 go build -a -ldflags="-s -w -buildid=" -installsuffix cgo -o ../service
+	cd backend && go generate && GOOS=linux go build -a -ldflags="-s -w -buildid=" -installsuffix cgo -o ../service
 
 frontend-check:
 	@echo "[frontend] Type checking..."
@@ -13,7 +13,7 @@ frontend-check:
 
 frontend-build: frontend-check
 	@echo "[frontend] Building..."
-	cd frontend && GOEXPERIMENT=jsonv2 go tool web_build -splitting
+	cd frontend && go tool web_build -splitting
 
 build: frontend-build backend-build
 
