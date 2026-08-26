@@ -1,6 +1,6 @@
 module github.com/altshiftab/altshift_tools
 
-go 1.26.6
+go 1.27
 
 tool (
 	github.com/altshiftab/web_build/cmd/web_build
