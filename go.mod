@@ -8,7 +8,7 @@ tool (
 )
 
 require (
-	github.com/altshiftab/altshift_web_security v0.4.0
+	github.com/altshiftab/altshift_web_security v0.4.1
 	github.com/altshiftab/utils_go v1.96.1
 )
 
