@@ -2,6 +2,6 @@ module github.com/altshiftab/altshift_tools_service
 
 go 1.27
 
-require github.com/altshiftab/utils_go v1.37.0
+require github.com/altshiftab/utils_go v1.96.1
 
 tool github.com/altshiftab/utils_go/cmd/generate_endpoints
