@@ -130,9 +130,9 @@ test("what the page shows when the analysis cannot be had", async () => {
             expected: {kind: "invalid", message: "The text is not HTTP response headers: malformed MIME header: missing colon: \"hello\"."},
         },
         {
-            name: "a status line and no fields",
+            name: "a status line and no fields, as partway through typing",
             answer: analyser => analyser.answers[0].resolve('{"findings":[],"error_kind":"empty","error":"There are no header fields to analyse."}'),
-            expected: {kind: "invalid", message: "There are no header fields to analyse."},
+            expected: {kind: "idle"},
         },
         {
             name: "the analysis failing",
@@ -198,7 +198,7 @@ test("closing stops the analyser and shows nothing more", async () => {
 test("viewOfReport", () => {
     const testCases: {name: string; report: Parameters<typeof viewOfReport>[0]; expectedKind: ViewState["kind"]}[] = [
         {name: "findings", report: {findings: [], field_count: 1, document: true}, expectedKind: "report"},
-        {name: "empty", report: {findings: [], field_count: 0, document: false, error_kind: "empty", error: "e"}, expectedKind: "invalid"},
+        {name: "empty", report: {findings: [], field_count: 0, document: false, error_kind: "empty", error: "e"}, expectedKind: "idle"},
         {name: "parse", report: {findings: [], field_count: 0, document: false, error_kind: "parse", error: "e"}, expectedKind: "invalid"},
         {name: "internal", report: {findings: [], field_count: 0, document: false, error_kind: "internal", error: "e"}, expectedKind: "failed"},
     ];

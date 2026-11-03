@@ -20,7 +20,9 @@ function errorMessage(error: unknown): string {
 // viewOfReport is what a report from the analysis shows as.
 export function viewOfReport(report: Report): ViewState {
     switch (report.error_kind) {
+        // A status line on its own is what there is partway through typing one; nothing is wrong yet.
         case "empty":
+            return {kind: "idle"};
         case "parse":
             return {kind: "invalid", message: report.error ?? "The text is not HTTP response headers."};
         case "internal":

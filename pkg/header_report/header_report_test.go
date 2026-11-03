@@ -109,6 +109,13 @@ func TestNew(t *testing.T) {
 			},
 		},
 		{
+			// Three cookies are three fields, though the analysis holds them under one name.
+			name:               "a repeated field counts each time",
+			text:               "Content-Type: text/html\nSet-Cookie: a=1\nSet-Cookie: b=2\nSet-Cookie: c=3\n",
+			expectedFieldCount: 4,
+			expectedDocument:   true,
+		},
+		{
 			name:              "empty",
 			text:              "",
 			expectedErrorKind: ErrorKindEmpty,

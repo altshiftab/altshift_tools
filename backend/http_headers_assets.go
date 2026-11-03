@@ -36,8 +36,7 @@ const (
 
 	javascriptContentType = "text/javascript"
 
-	contentEncodingHeaderName = "Content-Encoding"
-	acceptEncodingHeaderName  = "Accept-Encoding"
+	acceptEncodingHeaderName = "Accept-Encoding"
 
 	// The names are fixed, so a browser revalidates rather than keeps a stale copy.
 	httpHeadersAssetsCacheControl = "no-cache"
@@ -150,26 +149,9 @@ func makeHttpHeadersAssetContent(
 			return nil, err
 		}
 
-		// Shaped as endpoint.AddContentEncodingData shapes the encodings it makes, the policy headers
-		// included, so that a mux answering with an encoding's own headers says what it says for the
-		// identity body.
-		encodedEtag := altshiftHttpUtils.MakeStrongEtag(encodedData)
-		encodedHeaders := []*response.HeaderEntry{
-			{Name: contentEncodingHeaderName, Value: encoding.contentEncoding},
-			{Name: "ETag", Value: encodedEtag},
-		}
-		encodedHeaders = append(
-			encodedHeaders,
-			muxUtils.MakeStaticContentHeaders(asset.contentType, httpHeadersAssetsCacheControl, "", lastModified)...,
-		)
-		encodedHeaders = append(encodedHeaders, asset.headers...)
-
-		contentEncodingToData[encoding.contentEncoding] = &static_content.StaticContentData{
-			Data:         encodedData,
-			Etag:         encodedEtag,
-			LastModified: lastModified,
-			Headers:      slices.Clip(encodedHeaders),
-		}
+		// The bytes alone: the mux answers with the identity's headers whatever the encoding, adding
+		// Content-Encoding, and revalidates against the identity's ETag.
+		contentEncodingToData[encoding.contentEncoding] = &static_content.StaticContentData{Data: encodedData}
 	}
 
 	return &static_content.StaticContent{

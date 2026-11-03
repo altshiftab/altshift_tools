@@ -55,7 +55,8 @@ type Finding struct {
 // Report is the analysis of one header block, or why there is none.
 type Report struct {
 	Findings []*Finding `json:"findings"`
-	// FieldCount is the number of distinct header fields read, so the page can say what it saw.
+	// FieldCount is the number of header field lines read, a repeated field counting each time, so
+	// the page can say what it saw.
 	FieldCount int `json:"field_count"`
 	// Document says whether the response was taken to carry a document. Without a Content-Type,
 	// Content-Length or Transfer-Encoding it is not, and the headers that protect a document are
@@ -89,9 +90,14 @@ func New(text string) *Report {
 		}
 	}
 
+	fieldCount := 0
+	for _, values := range header {
+		fieldCount += len(values)
+	}
+
 	return &Report{
 		Findings:   MapRun(run),
-		FieldCount: len(header),
+		FieldCount: fieldCount,
 		Document:   headerAnalysis.ResponseHasBody(header),
 	}
 }

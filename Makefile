@@ -18,11 +18,13 @@ HTTP_HEADERS_ASSETS := backend/http_headers_assets
 
 # The /http-headers analysis, compiled to WebAssembly so that what is pasted is analysed in the
 # browser. It is built with the standard toolchain: TinyGo cannot build it, its standard library
-# lacking the net/http/cookiejar that utils_go's public suffix list imports.
+# lacking the net/http/cookiejar that utils_go's public suffix list imports. It carries no VCS
+# stamp, which would hand every visitor the revision and whether the tree was dirty, and would make
+# the backend that embeds it differ between a clean and a dirty build of one commit.
 http-headers-wasm:
 	@echo "[http-headers] Building the WebAssembly module..."
 	mkdir -p $(HTTP_HEADERS_ASSETS)
-	GOOS=js GOARCH=wasm go build -trimpath -ldflags="-s -w" -o $(HTTP_HEADERS_ASSETS)/http_headers.wasm ./cmd/http_headers_wasm
+	GOOS=js GOARCH=wasm go build -trimpath -buildvcs=false -ldflags="-s -w" -o $(HTTP_HEADERS_ASSETS)/http_headers.wasm ./cmd/http_headers_wasm
 	cp "$(GOROOT_WASM)/wasm_exec.js" $(HTTP_HEADERS_ASSETS)/
 
 http-headers-worker:
