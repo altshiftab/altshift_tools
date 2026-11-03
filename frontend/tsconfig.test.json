@@ -1,0 +1,11 @@
+{
+    "extends": "./tsconfig.json",
+    "compilerOptions": {
+        "noEmit": true,
+        // Node runs the TypeScript as it is, so a test names the file it tests by the name it has on
+        // disk rather than by the name a build would give it.
+        "allowImportingTsExtensions": true,
+        "types": ["node"]
+    },
+    "include": ["./src/scripts", "./test"]
+}

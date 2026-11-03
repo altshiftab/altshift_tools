@@ -6,4 +6,6 @@
 !/go.sum
 !/service.go
 !/service_test.go
+!/http_headers_assets.go
+!/http_headers_assets_test.go
 !/static_content_endpoints.go

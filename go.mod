@@ -8,8 +8,12 @@ tool (
 )
 
 require (
+	github.com/altshiftab/altshift_web_security v0.4.0
+	github.com/altshiftab/utils_go v1.96.1
+)
+
+require (
 	github.com/Microsoft/go-winio v0.6.4 // indirect
-	github.com/altshiftab/utils_go v1.96.1 // indirect
 	github.com/altshiftab/web_build v0.0.9 // indirect
 	github.com/evanw/esbuild v0.28.2 // indirect
 	github.com/go-json-experiment/json v0.0.0-20260820222146-c27c302e5fc3 // indirect

@@ -30,14 +30,18 @@ const contentSecurityPolicyHeaderName = "Content-Security-Policy"
 // sets innerHTML; the CreepJS-style probe constructs a Worker) -- can run under the enforced policy.
 // Only that module installs it, so the other routes keep full Trusted Types enforcement even though
 // the name is allowed everywhere.
+//
+// The /http-headers page creates its analysis worker through a policy of its own, which vouches for
+// the worker's URL and nothing else; see frontend lib/http_headers_worker.ts.
 const (
-	litHtmlTrustedTypesPolicy = "lit-html"
-	defaultTrustedTypesPolicy = "default"
+	litHtmlTrustedTypesPolicy           = "lit-html"
+	defaultTrustedTypesPolicy           = "default"
+	httpHeadersWorkerTrustedTypesPolicy = "http-headers-worker"
 )
 
 // spaRoutes are the routes the frontend routes on its own. The document is served at each of them
 // and at no root: there is no page at "/".
-var spaRoutes = []string{"/str", "/fingerprint", "/privacy-policy"}
+var spaRoutes = []string{"/str", "/fingerprint", "/http-headers", "/privacy-policy"}
 
 // toolEndpoints are the endpoints the service serves: what is built, with the document that would
 // be served at "/" served at the tool routes instead.
@@ -85,6 +89,15 @@ func main() {
 		)
 	}
 
+	httpHeadersAssetEndpoints, err := newHttpHeadersAssetEndpoints(httpHeadersAssets)
+	if err != nil {
+		logger.FatalWithExitingMessage(
+			"An error occurred when making the http headers asset endpoints.",
+			altshiftErrors.New(fmt.Errorf("new http headers asset endpoints: %w", err)),
+		)
+	}
+	endpoints = append(endpoints, httpHeadersAssetEndpoints...)
+
 	httpService, err := altshiftService.New(
 		service_config.WithHost(domain),
 		service_config.WithTrustForwardedHost(trustForwardedHost),
@@ -99,7 +112,11 @@ func main() {
 		// The endpoints are given before the service is made, the sitemap being made of what it is
 		// given: it lists the tool routes, and no root that is not served.
 		service_config.WithEndpoints(endpoints...),
-		service_config.WithTrustedTypes(litHtmlTrustedTypesPolicy, defaultTrustedTypesPolicy),
+		service_config.WithTrustedTypes(
+			litHtmlTrustedTypesPolicy,
+			defaultTrustedTypesPolicy,
+			httpHeadersWorkerTrustedTypesPolicy,
+		),
 		// The load balancer speaks prior-knowledge unencrypted HTTP/2 to the backend, which the
 		// standard library serves alongside HTTP/1.
 		service_config.WithUnencryptedHttp2(true),

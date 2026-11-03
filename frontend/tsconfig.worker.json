@@ -1,0 +1,14 @@
+{
+    // The /http-headers analysis worker is a classic worker script the backend serves at a fixed path,
+    // so it is transpiled on its own rather than bundled, whose output names carry a content hash.
+    "compilerOptions": {
+        "strict": true,
+        "target": "ES2022",
+        // No imports or exports, so the output is a plain script.
+        "module": "es2022",
+        "lib": ["ES2022", "WebWorker"],
+        "outDir": "../backend/http_headers_assets",
+        "rootDir": "./worker/http_headers"
+    },
+    "include": ["./worker/http_headers"]
+}

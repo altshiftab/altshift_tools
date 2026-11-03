@@ -9,3 +9,9 @@
 
 !/backend
 !/frontend
+
+# The analysis the /http-headers page runs in the browser, compiled to WebAssembly.
+!/cmd
+!/cmd/**/*
+!/pkg
+!/pkg/**/*

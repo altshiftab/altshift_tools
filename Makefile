@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := all
 
-.PHONY: all update frontend-update backend-update build frontend-check frontend-build backend-build publish backend-publish backend-publish-build backend-deploy
+.PHONY: all update frontend-update backend-update build check test test-wasm frontend-check frontend-test frontend-build backend-build backend-test http-headers-wasm http-headers-worker http-headers-assets publish backend-publish backend-publish-build backend-deploy
 
 IMAGE = europe-north2-docker.pkg.dev/altshift-main/images/altshift-tools:latest
 
@@ -13,14 +13,56 @@ IMAGE = europe-north2-docker.pkg.dev/altshift-main/images/altshift-tools:latest
 SERVICE = altshift-tools-eun1
 REGION = europe-north1
 
+GOROOT_WASM := $(shell go env GOROOT)/lib/wasm
+HTTP_HEADERS_ASSETS := backend/http_headers_assets
 
-backend-build:
+# The /http-headers analysis, compiled to WebAssembly so that what is pasted is analysed in the
+# browser. It is built with the standard toolchain: TinyGo cannot build it, its standard library
+# lacking the net/http/cookiejar that utils_go's public suffix list imports.
+http-headers-wasm:
+	@echo "[http-headers] Building the WebAssembly module..."
+	mkdir -p $(HTTP_HEADERS_ASSETS)
+	GOOS=js GOARCH=wasm go build -trimpath -ldflags="-s -w" -o $(HTTP_HEADERS_ASSETS)/http_headers.wasm ./cmd/http_headers_wasm
+	cp "$(GOROOT_WASM)/wasm_exec.js" $(HTTP_HEADERS_ASSETS)/
+
+http-headers-worker:
+	@echo "[http-headers] Building the worker..."
+	cd frontend && go tool tsgo -p tsconfig.worker.json
+
+# Each asset is compressed here rather than when the service starts, which for the module takes
+# seconds of every instance's start at the best brotli quality. Needs brotli and gzip.
+http-headers-assets: http-headers-wasm http-headers-worker
+	@echo "[http-headers] Compressing..."
+	for asset in worker.js wasm_exec.js http_headers.wasm; do \
+		file=$(HTTP_HEADERS_ASSETS)/$$asset; \
+		brotli --force --best --output=$$file.br $$file && gzip --best --no-name --force --keep $$file || exit 1; \
+	done
+
+backend-build: http-headers-assets
 	@echo "[backend] Building..."
 	cd backend && go generate && GOOS=linux go build -a -ldflags="-s -w -buildid=" -installsuffix cgo -o ../service
 
+# The backend embeds the built frontend and analysis assets, so its tests run after a build.
+backend-test: backend-build
+	cd backend && go test -race ./...
+
+test:
+	go test ./...
+
+# The bridge's tests, under js/wasm in Node, where syscall/js is real. The environment is cleared
+# because the runtime hands all of it to the module, which refuses more than a few kilobytes.
+test-wasm:
+	env -i PATH="$$PATH" HOME="$$HOME" GOPATH="$$(go env GOPATH)" GOMODCACHE="$$(go env GOMODCACHE)" GOCACHE="$$(go env GOCACHE)" \
+		GOPRIVATE="$$(go env GOPRIVATE)" GOOS=js GOARCH=wasm go test -exec "$(GOROOT_WASM)/go_js_wasm_exec" ./cmd/http_headers_wasm ./pkg/...
+
+frontend-test: frontend-check
+	cd frontend && npm test
+
+check: test test-wasm frontend-test backend-test
+
 frontend-check:
 	@echo "[frontend] Type checking..."
-	cd frontend && go tool tsgo --noEmit -p tsconfig.json
+	cd frontend && go tool tsgo --noEmit -p tsconfig.json && go tool tsgo --noEmit -p tsconfig.test.json
 
 frontend-build: frontend-check
 	@echo "[frontend] Building..."

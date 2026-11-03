@@ -3,6 +3,10 @@
         "target": "ESNext",
         "module": "ESNext",
         "strict": true,
+        // Type checking only: web_build bundles, so modules can name each other as they are named on
+        // disk, which is what lets node run the tests against them unbuilt.
+        "noEmit": true,
+        "allowImportingTsExtensions": true,
         "moduleResolution": "bundler",
         "resolveJsonModule": true,
         "esModuleInterop": true,

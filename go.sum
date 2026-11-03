@@ -1,5 +1,7 @@
 github.com/Microsoft/go-winio v0.6.4 h1:kJF2pamtYCWXf0xAT8sAkwKC0pMl2HYBrRPHAqyUc+g=
 github.com/Microsoft/go-winio v0.6.4/go.mod h1:1xl5JXG4ze/m74GH6Dc4Mwxfc3VL5siRVQjIAlHH07U=
+github.com/altshiftab/altshift_web_security v0.4.0 h1:G9bjobAaAsAHG4jvxqiYw9ooSNF6/DTUvBXJ9T+nNWc=
+github.com/altshiftab/altshift_web_security v0.4.0/go.mod h1:j11ecWSCEoJEtfC75K+VGjcXOBeL/TCtiLoRp3nz51E=
 github.com/altshiftab/utils_go v1.96.1 h1:6oEfjCySUX8DC7LBz7SUBEdgEKXjl2AO3Dj64FPYCac=
 github.com/altshiftab/utils_go v1.96.1/go.mod h1:lNBqVAWMIhIISNz0pOQnsqRsCPg6S50Q62GH6slGBOk=
 github.com/altshiftab/web_build v0.0.9 h1:xIlldsHM8XGY5Gf7IwiKSDsPvg5mmeGwFa7GsW5c0a8=
