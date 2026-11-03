@@ -4,13 +4,14 @@
 
 IMAGE = europe-north2-docker.pkg.dev/altshift-main/images/altshift-tools:latest
 
-# The two Cloud Run services the one image is deployed to. tools.altshift.se is served by
-# Firebase Hosting, which reaches a service over its run.app URL and cannot rewrite to
-# europe-north2 -- so the europe-north1 service is the one visitors actually get, and the
-# europe-north2 one behind the load balancer is what it is being moved off. Both answer for
-# the name until DNS says otherwise, so both are deployed: pushing the image does not make
-# Cloud Run take it, and deploying only the first leaves the public site on the old one.
-SERVICES = altshift-tools:europe-north2 altshift-tools-eun1:europe-north1
+# The Cloud Run service the image is deployed to. tools.altshift.se is served by Firebase Hosting,
+# which reaches a service over its run.app URL and cannot rewrite to europe-north2, so the service
+# runs in europe-north1 while the image stays in the europe-north2 registry. The europe-north2
+# service behind the load balancer is gone with the load balancer (altshift_infrastructure 6ea488d),
+# and deploying to it would only create it again. Pushing the image does not make Cloud Run take it,
+# so the deploy is what moves the public site.
+SERVICE = altshift-tools-eun1
+REGION = europe-north1
 
 
 backend-build:
@@ -50,14 +51,10 @@ backend-publish: build backend-publish-build
 publish: backend-publish
 
 backend-deploy: backend-publish
-	@echo "[backend] Deploying to Cloud Run..."
-	@for service in $(SERVICES); do \
-		name=$${service%%:*}; region=$${service##*:}; \
-		echo "[backend] Deploying $$name to $$region..."; \
-		gcloud run deploy $$name \
-			--image=$(IMAGE) \
-			--region=$$region \
-			--project=altshift-main \
-			--platform=managed \
-			--quiet || exit 1; \
-	done
+	@echo "[backend] Deploying $(SERVICE) to $(REGION)..."
+	gcloud run deploy $(SERVICE) \
+		--image=$(IMAGE) \
+		--region=$(REGION) \
+		--project=altshift-main \
+		--platform=managed \
+		--quiet
