@@ -68,7 +68,7 @@ frontend-check:
 
 frontend-build: frontend-check
 	@echo "[frontend] Building..."
-	cd frontend && go tool web_build -splitting
+	cd frontend && go tool web_build --splitting
 
 build: frontend-build backend-build
 
