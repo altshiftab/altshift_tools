@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := all
 
-.PHONY: all update frontend-update backend-update build check test test-wasm frontend-check frontend-test frontend-build backend-build backend-test http-headers-wasm http-headers-worker http-headers-assets publish backend-publish backend-publish-build backend-deploy
+.PHONY: all update frontend-update backend-update build check test test-wasm frontend-check frontend-test frontend-build backend-build backend-test http-headers-wasm http-headers-worker http-headers-assets publish backend-publish backend-publish-build backend-deploy guard-release-versions
 
 IMAGE = europe-north2-docker.pkg.dev/altshift-main/images/altshift-tools:latest
 
@@ -88,13 +88,21 @@ backend-publish-build:
 	@echo "[backend] Building for publish..."
 	cd backend && podman build . --tag altshift-tools
 
-backend-publish: build backend-publish-build
+# What is published is built from releases of my modules, never from a commit under test (a
+# pseudo-version): https://wiki.vvvp.se/?page=go-module-versions. GOWORK=off reads the module graph the
+# image is built from, and a failing go list fails the guard rather than passing it.
+guard-release-versions:
+	@for dir in backend .; do (cd $$dir && modules=$$(GOWORK=off go list -m -f '{{.Path}} {{.Version}}' all) && \
+	test_versions=$$(printf '%s\n' "$$modules" | grep -E '^github\.com/(Motmedel|altshiftab|vphpersson|intilgroup)/[^ ]* v[^ ]*[0-9]{14}-[0-9a-f]{12}$$' || true) && \
+	if [ -n "$$test_versions" ]; then printf '[deploy] Built from test versions of my modules; release them first:\n%s\n' "$$test_versions" >&2; exit 1; fi) || exit 1; done
+
+backend-publish: guard-release-versions build backend-publish-build
 	@echo "[backend] Publishing..."
 	podman tag altshift-tools $(IMAGE) && podman push $(IMAGE)
 
 publish: backend-publish
 
-backend-deploy: backend-publish
+backend-deploy: guard-release-versions backend-publish
 	@echo "[backend] Deploying $(SERVICE) to $(REGION)..."
 	gcloud run deploy $(SERVICE) \
 		--image=$(IMAGE) \
