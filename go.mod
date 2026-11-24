@@ -9,7 +9,7 @@ tool (
 
 require (
 	github.com/altshiftab/altshift_web_security v0.5.1
-	github.com/altshiftab/utils_go v1.125.2
+	github.com/altshiftab/utils_go v1.127.0
 )
 
 require (
