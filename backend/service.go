@@ -69,6 +69,16 @@ func toolEndpoints(endpoints []*endpointPkg.Endpoint) ([]*endpointPkg.Endpoint, 
 	return append(toolEndpoints, endpointPkg.Duplicate(indexEndpoint, spaRoutes...)...), nil
 }
 
+// forwardedForOption reads the client second from the right of X-Forwarded-For: Firebase Hosting
+// replaces the header with the client and Google's front end appends Firebase's edge. A direct
+// run.app call can name any client, which is accepted.
+func forwardedForOption() service_config.Option {
+	return func(config *service_config.Config) {
+		service_config.WithTrustForwardedFor(true)(config)
+		service_config.WithForwardedForHops(2)(config)
+	}
+}
+
 func main() {
 	logger := altshiftHttpLogger.New(http_logger_config.WithGcp(true))
 	slog.SetDefault(logger.Logger)
@@ -101,6 +111,7 @@ func main() {
 	httpService, err := altshiftService.New(
 		service_config.WithHost(domain),
 		service_config.WithTrustForwardedHost(trustForwardedHost),
+		forwardedForOption(),
 		service_config.WithAddress(fmt.Sprintf(":%s", port)),
 		service_config.WithProfile(service_config.ProfilePublicWeb),
 		// The frontend is built with code splitting, so a document names its chunks in an import map
